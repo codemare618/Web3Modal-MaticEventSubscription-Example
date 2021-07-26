@@ -63,7 +63,8 @@ var API = (function(){
   return {
     getTokenPrice,
     canMint,
-    getMaxQty
+    getMaxQty,
+    mintTokens
   }
 })();
 

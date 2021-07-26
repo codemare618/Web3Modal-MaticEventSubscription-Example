@@ -211,7 +211,17 @@ const contractLib = (function () {
 
         if (receipt.status === true) {
           Log.addLog(`Sending mint request to server with txHash : ${receipt.transactionHash}`);
-
+          API.mintTokens(selectedAccount, receipt.transactionHash, count, sessionId)
+            .then(r => {
+              Log.addLog('Successfully submitted mint request');
+            })
+            .catch(err => {
+              let errMessage = err.message;
+              if (err.response && err.response.data) {
+                errMessage = err.response.data;
+              }
+              Log.addLog(`Error occurred while submitting, Please try again later with ETH pay txHash, However ETH was paid out, error Message : ${errMessage}`);
+            });
         } else {
           Log.addLog(`Transaction status is not success`);
         }
@@ -223,8 +233,8 @@ const contractLib = (function () {
   }
 
   async function getOwnerOfToken(tokenId) {
-    const web3 = new Web3(provider);
-    const contract = new web3.eth.Contract(Config.tokenABI.abi, Config.contractAddress);
+    const web3 = new Web3(Config.maticProvider.http);
+    const contract = new web3.eth.Contract(tokenABI.abi, Config.contractAddress);
     return await contract.methods.ownerOf(tokenId).call();
   }
 
