@@ -46,18 +46,15 @@ var API = (function(){
   }
 
   function mintTokens(to, txHash, count, sessionId){
-    return instance.get('mintTokens')
-      .then(r => r.data, {
-        params: {
-          to,
-          txHash,
-          count,
-          sessionId,
-        }
-      })
-      .catch(err => {
-
-      })
+    return instance.get('mintTokens', {
+      params: {
+        to,
+        txHash,
+        count,
+        sessionId,
+      }
+    })
+      .then(r => r.data);
   }
 
   return {
