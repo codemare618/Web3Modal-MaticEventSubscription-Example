@@ -5,48 +5,10 @@ const contractLib = (function () {
   let provider;
   let selectedAccount;
   let handlersIndex = 0;
-  let maticMintSubscription;
   const handlers = {};
 
   const Web3Modal = window.Web3Modal.default;
   const WalletConnectProvider = window.WalletConnectProvider.default;
-
-
-  // Function to subscribe matic mint event
-  function subscribeContractEvent(eventName, eventCallback) {
-    // Create MATIC Web3
-    const web3 = new Web3(Config.maticProvider.wss);
-    const contract = new web3.eth.Contract(tokenABI.abi, Config.contractAddress);
-
-
-    const eventJsonInterface = web3.utils._.find(
-      contract._jsonInterface,
-      o => o.name === eventName && o.type === 'event',
-    );
-
-    console.log(`Subscribing to ${eventName} event`);
-
-    const subscription = web3.eth.subscribe('logs', {
-      address: contract.options.address,
-      topics: [eventJsonInterface.signature]
-    }, function (error, result) {
-      if (error){
-        console.log(`Subscribe event error : ${error}`);
-        eventCallback(error);
-        return;
-      }
-      const eventObj = web3.eth.abi.decodeLog(
-        eventJsonInterface.inputs,
-        result.data,
-        result.topics.slice(1)
-      )
-      console.log(`Subscribe event New ${eventName}!`, eventObj);
-      eventCallback(undefined, eventObj);
-    });
-
-    return subscription;
-  }
-
 
   async function initialize() {
     console.log('Initializing example');
@@ -95,20 +57,6 @@ const contractLib = (function () {
 
     const accounts = await web3.eth.getAccounts();
     selectedAccount = accounts[0];
-
-
-    if (maticMintSubscription) {
-      maticMintSubscription.unsubscribe(function(error, success) {
-          console.log(`Unsubscribe to matic mint event : Error : ${error}, Success: ${success}`);
-      });
-    }
-
-    maticMintSubscription = subscribeContractEvent('Mint', function(error, result){
-      // When it is minted to selected account
-      if (result.to === selectedAccount) {
-        Log.addLog(`Token ${result.tokenId} is minted to ${result.to}, sessionId = ${result.sessionId}`);
-      }
-    });
 
     notifyStatusUpdates();
   }
@@ -164,7 +112,7 @@ const contractLib = (function () {
     return provider && selectedAccount;
   }
 
-  async function mintTokens(sessionId, count) {
+  async function mintTokens(count) {
     if (!isConnected()) {
       throw new Error('Not Connected to wallet');
     }
@@ -173,73 +121,104 @@ const contractLib = (function () {
       throw new Error('Invalid mint count');
     }
 
-    if (!sessionId) {
-      throw new Error('Invalid session id');
-    }
-
     // Get the token price and send ether to contract owner
     const web3 = new Web3(provider);
+    const contract = new web3.eth.Contract(tokenABI, Config.contractAddress);
 
-    // Calculate the price
-    const tokenPrice = await API.getTokenPrice(selectedAccount, sessionId);
-    const maxMintQty = await API.getMaxQty();
-    const canMint = await API.canMint(selectedAccount, sessionId, count);
+    const {maxMint, maxSupply, canMint, price, sessionId, expirationTime, signature} = await API.getMintParams(selectedAccount);
 
-    Log.addLog(`Token Price: ${tokenPrice}ETH, Maximum mintable quantity: ${maxMintQty}, canMint call for ${count}: ${canMint}`);
+    Log.addLog(`Parameters response: price=${price}ETH, maxSupply=${maxSupply}, maxMint=${maxMint}, price=${price}, sessionId=${sessionId}, expirationTime=${expirationTime} signature=${signature}`);
 
     if (!canMint) {
       throw new Error(`Can mint api returned false`);
     }
 
-    if (count > maxMintQty) {
-      throw new Error(`Mint count exceeds maximum mintable count ${maxMintQty}`);
+    if (count > maxMint) {
+      throw new Error(`Mint count exceeds maximum mintable count ${maxMint}`);
     }
 
-    const ethAmount = tokenPrice * count;
-    const ethRecipient = Config.ethRecipient;
-    Log.addLog(`Should send ${ethAmount} ETH to contract owner ${ethRecipient}`);
-
+    // Calling smart contracts
+    const ethAmount = price * count;
     // Send eth to contract owner
-    const amountToSend = web3.utils.toWei(`${ethAmount}`, 'ether');
-    web3.eth.sendTransaction({from: selectedAccount, to: ethRecipient, value:amountToSend})
+    const value = web3.utils.toWei(`${ethAmount}`, 'ether');
+    const priceInWei = web3.utils.toWei(`${price}`, 'ether');
+    Log.addLog(`Should send ${ethAmount} ETH to contract`);
+
+    const gasPrice = await web3.eth.getGasPrice();
+    const mintMethod = contract.methods.mintTokens(selectedAccount, count, maxSupply, maxMint, priceInWei, canMint, sessionId, expirationTime, signature);
+    const gasEstimate = await mintMethod.estimateGas({
+      from: selectedAccount,
+      gasPrice,
+      value
+    });
+
+    // Call method
+    mintMethod.send({
+      from: selectedAccount,
+      gasPrice,
+      gas: gasEstimate,
+      value,
+    })
       .on('transactionHash', function(hash) {
-        Log.addLog(`ETH transaction hash : ${hash}`);
+        Log.addLog(`MintToken transaction hash : ${hash}`);
       })
       .on('receipt', function(receipt){
         console.log(receipt);
-        Log.addLog(`Transaction completed : blockNumber: [${receipt.blockNumber}], gasUsed:[${receipt.gasUsed}], status: [${receipt.status}], txHash:[${receipt.transactionHash}]`);
+        Log.addLog(`Mint Transaction completed : blockNumber: [${receipt.blockNumber}], gasUsed:[${receipt.gasUsed}], status: [${receipt.status}], txHash:[${receipt.transactionHash}]`);
 
         if (receipt.status === true) {
-          Log.addLog(`Sending mint request to server with txHash : ${receipt.transactionHash}`);
-          API.mintTokens(selectedAccount, receipt.transactionHash, count, sessionId)
-            .then(r => {
-              Log.addLog('Successfully submitted mint request');
-            })
-            .catch(err => {
-              let errMessage = err.message;
-              if (err.response && err.response.data) {
-                errMessage = err.response.data;
-              }
-              Log.addLog(`Error occurred while submitting, Please try again later with ETH pay txHash, However ETH was paid out, error Message : ${errMessage}`);
-            });
+          Log.addLog(`Mint transaction success txHash : ${receipt.transactionHash}`);
         } else {
           Log.addLog(`Transaction status is not success`);
         }
       })
       .on('error', function(err){
-        console.log('send ether err', err);
-        Log.addLog(`Error occurred while sending ${ethAmount}ETH, Error : ${err}`);
+        console.log(err);
+        Log.addLog(`Mint transaction Error : ${err}`);
       });
   }
 
   async function getOwnerOfToken(tokenId) {
-    const web3 = new Web3(Config.maticProvider.http);
-    const contract = new web3.eth.Contract(tokenABI.abi, Config.contractAddress);
+    const web3 = new Web3(provider);
+    const contract = new web3.eth.Contract(tokenABI, Config.contractAddress);
     return await contract.methods.ownerOf(tokenId).call();
+  }
+
+  async function getOwnerOfContract() {
+    const web3 = new Web3(provider);
+    const contract = new web3.eth.Contract(tokenABI, Config.contractAddress);
+    return await contract.methods.owner().call();
   }
 
   function getSelectedAccount() {
     return selectedAccount;
+  }
+
+  async function withdrawAll(){
+    if (!isConnected()) {
+      throw new Error('Not Connected to wallet');
+    }
+    const ownerOfContract = await getOwnerOfContract();
+    if (ownerOfContract !== selectedAccount) {
+      throw new Error('You are not owner of the contract');
+    }
+    const web3 = new Web3(provider);
+    const contract = new web3.eth.Contract(tokenABI, Config.contractAddress);
+    contract.methods.withdrawAll().send({
+      from: selectedAccount
+    }).on('transactionHash', (hash) => {
+      Log.addLog(`Withdrawal request submitted : Transaction Hash: ${hash}`);
+    }).on('receipt', function(receipt) {
+      console.log(receipt);
+      Log.addLog(`Withdrawal transaction completed : blockNumber: [${receipt.blockNumber}], gasUsed:[${receipt.gasUsed}], status: [${receipt.status}], txHash:[${receipt.transactionHash}]`);
+      if (receipt.status === true) {
+        Log.addLog(`Mint transaction success txHash : ${receipt.transactionHash}`);
+      } else {
+        Log.addLog(`Transaction status is not success`);
+      }
+    }).on('error', (err) => {
+      Log.addLog(`Withdrawal failed with error :${err}`)
+    });
   }
 
   // Account status, ...
@@ -266,6 +245,8 @@ const contractLib = (function () {
     removeChangeListener,
     mintTokens,
     getOwnerOfToken,
+    getOwnerOfContract,
+    withdrawAll,
   };
 })();
 

@@ -27,7 +27,7 @@
     }
   }
 
-  function refreshStatus(){
+  async function refreshStatus(){
     document.querySelector('#spn_contract').textContent = Config.contractAddress;
 
     const isConnected = contractLib.isConnected();
@@ -37,6 +37,17 @@
     setButtonEnabled('#btn_check', isConnected);
 
     document.querySelector('#spn_account').textContent = contractLib.getSelectedAccount() || '';
+
+    // Get contract owner
+    const contractOwner = await contractLib.getOwnerOfContract();
+    console.log(contractOwner);
+    const isOwner = (contractOwner === contractLib.getSelectedAccount());
+
+    setButtonEnabled('#btn_mint', isConnected && !isOwner);
+
+    document.querySelector('#section_mint').style.display = isOwner ? 'none' : 'block';
+    document.querySelector('#section_widthdraw').style.display = !isOwner ? 'none' : 'block';
+    document.querySelector('#spn_contract_owner').style.display = !isOwner ? 'none' : 'block';
   }
 
   function onBodyLoad(){
@@ -54,16 +65,11 @@
       alert('enter valid number');
     }
 
-    let sessionId = document.getElementById('txt_session_id').value;
-    if (!sessionId) {
-      alert('enter session id');
-    }
     try {
-      const hash = await contractLib.mintTokens(sessionId, mintCount);
-      alert('Transaction hash: ' + hash);
+      await contractLib.mintTokens(mintCount);
     }catch(err){
       if (err) {
-        alert('Error occured while minting : ' + err.message);
+        alert('Error occurred while minting : ' + err.message);
       }
     }
   }
@@ -81,6 +87,14 @@
     alert(await checkToken(tokenId));
   }
 
+  async function onWithdraw(){
+    try {
+      await contractLib.withdrawAll();
+    }catch(err){
+      alert('Error occurred while withdrawal : ' + err.message);
+    }
+  }
+
 </script>
 <body onload="onBodyLoad();">
 <p>
@@ -96,16 +110,19 @@
 <p>
     <span>Selected Account:</span>
     <span id="spn_account"></span>
+    <span id="spn_contract_owner" style="display: none">&nbsp;(Contract Owner)</span>
 </p>
-<p>
-    <label for="txt_session_id">Session Id:<input type="text" id="txt_session_id"></label>
-    <input type="text" id="txt_token_count" style="margin-left: 30px">
+<p id="section_mint" style="display: none">
+    <label for="txt_token_count">Enter token count to mint:</label>
+    <input type="text" id="txt_token_count">
     <button onclick="onMint();" id="btn_mint">Mint</button>
 </p>
 <p>
-
     <input type="text" id="txt_token_id">
     <button onclick="onCheckToken();" id="btn_check">Check Token</button>
+</p>
+<p id="section_widthdraw" style="display: none">
+    <button onclick="onWithdraw();" id="btn_withdraw">Withdraw</button>
 </p>
 <p>
     <br/><br/><br/>

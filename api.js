@@ -3,65 +3,13 @@ var API = (function(){
     baseURL: Config.apiEndPoint
   });
 
-  //TODO - Comment out catch when api works correctly
-  function getTokenPrice(userId, sessionId) {
-    return instance.get('tokenPrice', {
-      params: {
-        userId, sessionId
-      }
-    })
-      .then(r => r.data)
-      .catch((err) => {
-        return {
-          price: 0.04
-        }
-      })
-      .then(r => r.price);
+  function getMintParams(userId){
+    return instance.get('signParameters', {
+    //return instance.get('http://localhost:8080/', {
+      params: {userId}
+    }).then(r => r.data);
   }
 
-  function canMint(userId, sessionId, mintQty){
-    return instance.get('tokenPrice', {
-      params: {
-        userId, sessionId, mintQty
-      }
-    }).then(r => r.data)
-      .catch(err => {
-        return {
-          canMint: true
-        }
-      })
-      .then(r => r.canMint)
-      ;
-  }
-
-  function getMaxQty(){
-    return instance.get('maxQty')
-      .then(r => r.data)
-      .catch(err => {
-        return {
-          maxQty: 500
-        }
-      })
-      .then(r => r.maxQty);
-  }
-
-  function mintTokens(to, txHash, count, sessionId){
-    return instance.get('mintTokens', {
-      params: {
-        to,
-        txHash,
-        count,
-        sessionId,
-      }
-    })
-      .then(r => r.data);
-  }
-
-  return {
-    getTokenPrice,
-    canMint,
-    getMaxQty,
-    mintTokens
-  }
+  return {getMintParams};
 })();
 
