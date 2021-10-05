@@ -4,17 +4,32 @@
     <meta charset="UTF-8">
     <title>Token Test</title>
     <!-- Order of importing files is pretty important -->
+    <script type="text/javascript" src="jazzicon_walletlink.js"></script>
     <script type="text/javascript" src="https://unpkg.com/web3@1.2.11/dist/web3.min.js"></script>
     <script type="text/javascript" src="https://unpkg.com/web3modal@1.9.0/dist/index.js"></script>
+    <script type="text/javascript" src="https://unpkg.com/evm-chains@0.2.0/dist/umd/index.min.js"></script>
     <script type="text/javascript" src="https://unpkg.com/@walletconnect/web3-provider@1.2.1/dist/umd/index.min.js"></script>
+    <script type="text/javascript" src="https://unpkg.com/fortmatic@2.0.6/dist/fortmatic.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@portis/web3@4.0.5/umd/index.js"></script>
     <script type="text/javascript" src="axios-0.21.1.min.js"></script>
     <script type="text/javascript" src="log.js"></script>
-    <script src="./token.js"></script>
+    <script src="./tokenA.js"></script>
+    <script src="./tokenB.js"></script>
+    <script src="./tokenC.js"></script>
     <script src="./config.js"></script>
     <script type="text/javascript" src="api.js"></script>
     <script src="./lib.js"></script>
+    <style>
+        #header {
+            display:flex;
+            align-items: center;
+        }
+    </style>
 </head>
 <script>
+  // Icon Generator
+  var JAZZICON = require('@metamask/jazzicon');
+
   function setButtonEnabled(btnId, enabled) {
     const btnInstance = document.querySelector(btnId);
     if (!btnInstance){
@@ -27,8 +42,25 @@
     }
   }
 
+  function getTokenIdsArray(str){
+    const tokenIdsSplitted = str.split(',');
+    const tokenIds = [];
+    for (let i = 0; i < tokenIdsSplitted.length; i++) {
+      if (tokenIdsSplitted[i].trim().length){
+        try {
+          const tokenId = parseInt(tokenIdsSplitted[i]);
+          if (!isNaN(tokenId)){
+            tokenIds.push(tokenId);
+          }
+        }catch(ex){}
+      }
+    }
+    return tokenIds;
+  }
+
   async function refreshStatus(){
-    document.querySelector('#spn_contract').textContent = Config.contractAddress;
+    document.querySelector('#spn_contract_a').textContent = Config.contractAddress_A;
+    document.querySelector('#spn_contract_b').textContent = Config.contractAddress_B;
 
     const isConnected = contractLib.isConnected();
     setButtonEnabled('#btn_connect', !isConnected);
@@ -36,23 +68,49 @@
     setButtonEnabled('#btn_mint', isConnected);
     setButtonEnabled('#btn_check', isConnected);
 
-    document.querySelector('#spn_account').textContent = contractLib.getSelectedAccount() || '';
+    const account = contractLib.getSelectedAccount();
+
+    // update account and icon
+    document.querySelector('#spn_selected_account').textContent = account || '';
+    document.querySelector('#spn_icon_account').innerHTML = '';
+    if (account) {
+      document.querySelector('#spn_icon_account').appendChild(JAZZICON(25, parseInt(account.slice(2, 10), 16)));
+
+      //query balance
+      contractLib.getETHBalance(account).then(balance => {
+        document.querySelector('#spn_eth_balance').textContent = balance;
+      });
+
+    } else {
+      document.querySelector('#spn_eth_balance').textContent = '';
+    }
 
     // Get contract owner
     const contractOwner = await contractLib.getOwnerOfContract();
     console.log(contractOwner);
-    const isOwner = (contractOwner === contractLib.getSelectedAccount());
+    const isOwner = (contractOwner === account);
 
     setButtonEnabled('#btn_mint', isConnected && !isOwner);
-
     document.querySelector('#section_mint').style.display = isOwner ? 'none' : 'block';
+
     document.querySelector('#section_widthdraw').style.display = !isOwner ? 'none' : 'block';
     document.querySelector('#spn_contract_owner').style.display = !isOwner ? 'none' : 'block';
+
   }
 
   function onBodyLoad(){
     contractLib.addChangeListener(refreshStatus);
     refreshStatus();
+
+    setInterval(() => {
+      //query balance
+      const account = contractLib.getSelectedAccount();
+      if (account) {
+        contractLib.getETHBalance(account).then(balance => {
+          document.querySelector('#spn_eth_balance').textContent = balance;
+        });
+      }
+    },1000);
   }
 
   async function onMint(){
@@ -65,8 +123,9 @@
       alert('enter valid number');
     }
 
+    const tokenIds = getTokenIdsArray(document.getElementById('txt_b_tokens').value);
     try {
-      await contractLib.mintTokens(mintCount);
+      await contractLib.mintTokens(mintCount, tokenIds);
     }catch(err){
       if (err) {
         alert('Error occurred while minting : ' + err.message);
@@ -95,35 +154,82 @@
     }
   }
 
+
+  async function onCheckBToken(){
+    const tokenIds = getTokenIdsArray(document.getElementById('txt_b_tokens_check').value);
+    if (!tokenIds.length) {
+      alert('No B tokens to check!');
+      return;
+    }
+
+    document.querySelector('#section_b_tokens_result').innerHTML = '';
+
+    const result = await contractLib.checkBTokens(tokenIds);
+    const account = contractLib.getSelectedAccount();
+    let resultHtml = '';
+    for (let i = 0; i < result.length; i++) {
+      resultHtml += '<span>' + (tokenIds[i] + ' - ' + result[i] + ' - ' + (account === result[i]) + '</span><br>');
+    }
+    document.querySelector('#section_b_tokens_result').innerHTML = resultHtml;
+  }
+
 </script>
 <body onload="onBodyLoad();">
-<p>
-    <span>Contract Address:</span>
-    <span id="spn_contract"></span>
-</p>
-<p>
+<div id="header">
     <button onclick="contractLib.connectToWallet();" id="btn_connect">Connect</button>
-</p>
-<p >
     <button onclick="contractLib.disconnectWallet();" id="btn_disconnect">Disconnect</button>
+    <div style="flex: 1"></div>
+    <span id="spn_eth_balance"></span>&nbsp;-&nbsp;[
+    <span id="spn_selected_account"></span>]&nbsp;
+    <span id="spn_contract_owner" style="display: none">&nbsp;(Contract A Owner)</span>
+    <span id="spn_icon_account"></span>
+</div>
+<p>
+    <span>Contract A Address:</span>
+    <span id="spn_contract_a"></span>
 </p>
 <p>
-    <span>Selected Account:</span>
-    <span id="spn_account"></span>
-    <span id="spn_contract_owner" style="display: none">&nbsp;(Contract Owner)</span>
+    <span>Contract B Address:</span>
+    <span id="spn_contract_b"></span>
 </p>
-<p id="section_mint" style="display: none">
-    <label for="txt_token_count">Enter token count to mint:</label>
-    <input type="text" id="txt_token_count">
-    <button onclick="onMint();" id="btn_mint">Mint</button>
-</p>
-<p>
-    <input type="text" id="txt_token_id">
-    <button onclick="onCheckToken();" id="btn_check">Check Token</button>
-</p>
-<p id="section_widthdraw" style="display: none">
-    <button onclick="onWithdraw();" id="btn_withdraw">Withdraw</button>
-</p>
+<div>
+    <fieldset>
+        <legend>Contract B interaction</legend>
+            <p>
+                <label for="txt_b_tokens_check">Enter Tokens to Check:</label>
+                <input type="text" id="txt_b_tokens_check">
+                <button onclick="onCheckBToken();" id="btn_check_b_tokens">Check Owner</button>
+            </p>
+            <p id="section_b_tokens_result">
+
+            </p>
+    </fieldset>
+</div>
+<p/>
+<div>
+    <fieldset>
+        <legend>Contract A interaction</legend>
+        <div id="section_mint" style="display: none">
+            <p>
+                <label for="txt_b_tokens">Enter Contract B token ids to deposit:</label>
+                <input type="text" id="txt_b_tokens">
+            </p>
+            <p>
+                <label for="txt_token_count">Enter token count to mint:</label>
+                <input type="text" id="txt_token_count">
+            </p>
+            <button onclick="onMint();" id="btn_mint">Mint</button>
+        </div>
+        <p>
+            <input type="text" id="txt_token_id">
+            <button onclick="onCheckToken();" id="btn_check">Check Token Owner</button>
+        </p>
+        <p id="section_widthdraw" style="display: none">
+            <button onclick="onWithdraw();" id="btn_withdraw">Withdraw</button>
+        </p>
+    </fieldset>
+</div>
+
 <p>
     <br/><br/><br/>
     <h3>Logs</h3>

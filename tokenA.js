@@ -1,6 +1,12 @@
-var tokenABI = [
+var tokenABI_A = [
   {
-    "inputs": [],
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "depositNFT",
+        "type": "address"
+      }
+    ],
     "stateMutability": "nonpayable",
     "type": "constructor"
   },
@@ -270,9 +276,9 @@ var tokenABI = [
         "type": "string"
       },
       {
-        "internalType": "uint256",
-        "name": "expirationTime",
-        "type": "uint256"
+        "internalType": "uint256[]",
+        "name": "tokenIds",
+        "type": "uint256[]"
       }
     ],
     "name": "getMessageHash",
@@ -313,11 +319,6 @@ var tokenABI = [
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "_to",
-        "type": "address"
-      },
-      {
         "internalType": "uint256",
         "name": "_count",
         "type": "uint256"
@@ -348,9 +349,9 @@ var tokenABI = [
         "type": "string"
       },
       {
-        "internalType": "uint256",
-        "name": "_expirationTime",
-        "type": "uint256"
+        "internalType": "uint256[]",
+        "name": "_tokenIds",
+        "type": "uint256[]"
       },
       {
         "internalType": "bytes",
@@ -704,9 +705,9 @@ var tokenABI = [
         "type": "string"
       },
       {
-        "internalType": "uint256",
-        "name": "_expirationTime",
-        "type": "uint256"
+        "internalType": "uint256[]",
+        "name": "_tokenIds",
+        "type": "uint256[]"
       },
       {
         "internalType": "bytes",

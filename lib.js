@@ -7,8 +7,11 @@ const contractLib = (function () {
   let handlersIndex = 0;
   const handlers = {};
 
+  const WalletLink = require('walletlink');
   const Web3Modal = window.Web3Modal.default;
   const WalletConnectProvider = window.WalletConnectProvider.default;
+  const Fortmatic = window.Fortmatic;
+
 
   async function initialize() {
     console.log('Initializing example');
@@ -19,7 +22,41 @@ const contractLib = (function () {
       walletconnect: {
         package: WalletConnectProvider,
         options: Config.options.walletconnect
+      },
+      fortmatic: {
+        package: Fortmatic,
+        options: Config.options.fortmatic
+      },
+      portis: {
+        package: Portis,
+        options: {
+          id: 'eea77458-bf39-4dbd-a35c-0b5088212bab',
+        }
+      },
+      /*
+      'custom-walletlink': {
+        display: {
+          logo: 'https://github.com/walletlink/walletlink/blob/master/web/src/images/wallets/coinbase-wallet.svg',
+          name: 'WalletLink',
+          description: 'Scan with WalletLink to connect',
+        },
+        options: {
+          appName: Config.options.walletlink.appName, // Your app name
+          networkUrl: Config.options.walletlink.networkUrl,
+          chainId: Config.options.walletlink.chainId,
+        },
+        package: WalletLink,
+        connector: async (_, options) => {
+          const { appName, networkUrl, chainId } = options
+          const walletLink = new WalletLink({
+            appName
+          });
+          const provider = walletLink.makeWeb3Provider(networkUrl, chainId);
+          await provider.enable();
+          return provider;
+        },
       }
+       */
     };
 
     web3Modal = new Web3Modal({
@@ -42,12 +79,12 @@ const contractLib = (function () {
 
     provider.on('chainChanged', (chainId) => {
       // Refresh window when chain is changed
-      window.location.refresh();
+      window.location.reload();
     });
 
     provider.on('networkChanged', (networkId) => {
       // Refresh window when chain is changed
-      window.location.refresh();
+      window.location.reload();
     });
     updateSelectedAccount().then();
   }
@@ -65,7 +102,11 @@ const contractLib = (function () {
     if (provider) {
       console.log('Already Connected');
     }
-    await _connectInternal();
+    try {
+      await _connectInternal();
+    }catch(ex){
+      console.log(ex);
+    }
   }
 
   async function disconnectWallet() {
@@ -112,7 +153,7 @@ const contractLib = (function () {
     return provider && selectedAccount;
   }
 
-  async function mintTokens(count) {
+  async function mintTokens(count, tokenIds) {
     if (!isConnected()) {
       throw new Error('Not Connected to wallet');
     }
@@ -121,13 +162,17 @@ const contractLib = (function () {
       throw new Error('Invalid mint count');
     }
 
+    if (!Array.isArray(tokenIds)) {
+      throw new Error('Invalid B token ids');
+    }
+
     // Get the token price and send ether to contract owner
     const web3 = new Web3(provider);
-    const contract = new web3.eth.Contract(tokenABI, Config.contractAddress);
+    const contract = new web3.eth.Contract(Config.tokenABI_A, Config.contractAddress_A);
 
-    const {maxMint, maxSupply, canMint, price, sessionId, expirationTime, signature} = await API.getMintParams(selectedAccount);
+    const {maxMint, maxSupply, canMint, price, sessionId, signature} = await API.getMintParams(selectedAccount, tokenIds);
 
-    Log.addLog(`Parameters response: price=${price}ETH, maxSupply=${maxSupply}, maxMint=${maxMint}, price=${price}, sessionId=${sessionId}, expirationTime=${expirationTime} signature=${signature}`);
+    Log.addLog(`Parameters response: price=${price}ETH, maxSupply=${maxSupply}, maxMint=${maxMint}, price=${price}, sessionId=${sessionId}, signature=${signature}`);
 
     if (!canMint) {
       throw new Error(`Can mint api returned false`);
@@ -145,23 +190,70 @@ const contractLib = (function () {
     Log.addLog(`Should send ${ethAmount} ETH to contract`);
 
     const gasPrice = await web3.eth.getGasPrice();
-    const mintMethod = contract.methods.mintTokens(selectedAccount, count, maxSupply, maxMint, priceInWei, canMint, sessionId, expirationTime, signature);
+
+    // before calling, setApprove for the contractA to process the token.
+    const contractB = new web3.eth.Contract(Config.tokenABI_B, Config.contractAddress_B);
+    const routerContract = new web3.eth.Contract(Config.tokenABI_Router, Config.contractAddress_Router);
+
+
+    const mintMethod = routerContract.methods.mintTokens(count, maxSupply, maxMint, priceInWei, canMint, sessionId, tokenIds, signature);
+    //const mintMethod = contract.methods.mintTokens(count, maxSupply, maxMint, priceInWei, canMint, sessionId, tokenIds, signature);
+    const verified = await contract.methods.verify('0xFda97A173ae15750bEd99991CCf63c6221390Ca5', selectedAccount, maxSupply, maxMint, priceInWei, canMint, sessionId, [], signature).call();
+    console.log('verified---', verified);
+
+    if (!await contractB.methods.isApprovedForAll(selectedAccount, Config.contractAddress_Router).call()) {
+      const approveMethod = contractB.methods.setApprovalForAll(Config.contractAddress_Router, true);
+      const gasEstimate = await approveMethod.estimateGas({
+        from: selectedAccount,
+        gasPrice
+      });
+      await approveMethod.send({
+        from: selectedAccount,
+        gasPrice,
+        gas: gasEstimate
+      }).on('transactionHash', function(hash) {
+        Log.addLog(`Approve transaction hash : ${hash}`);
+      })
+        .on('receipt', async function(receipt){
+          console.log(receipt);
+          Log.addLog(`Approve Transaction completed : blockNumber: [${receipt.blockNumber}], gasUsed:[${receipt.gasUsed}], status: [${receipt.status}], txHash:[${receipt.transactionHash}]`);
+          if (receipt.status === true) {
+            await _mintTokensInternal(mintMethod, gasPrice, value);
+          } else {
+            Log.addLog(`Approve Transaction status is not success`);
+          }
+        })
+        .on('error', function(err){
+          console.log(err);
+          Log.addLog(`Approve transaction Error : ${err}`);
+        });
+
+      // // Call method
+      // mintMethod.send({
+      //   from: selectedAccount,
+      //   gasPrice,
+      //   gas: gasEstimate,
+      //   value,
+      // })
+    } else {
+      await _mintTokensInternal(mintMethod, gasPrice, value);
+    }
+  }
+
+  async function _mintTokensInternal(mintMethod, gasPrice, value){
     const gasEstimate = await mintMethod.estimateGas({
       from: selectedAccount,
       gasPrice,
       value
     });
-
-    // Call method
     mintMethod.send({
       from: selectedAccount,
       gasPrice,
       gas: gasEstimate,
-      value,
+      value
+    }).on('transactionHash', function(hash) {
+      Log.addLog(`MintToken transaction hash : ${hash}`);
     })
-      .on('transactionHash', function(hash) {
-        Log.addLog(`MintToken transaction hash : ${hash}`);
-      })
       .on('receipt', function(receipt){
         console.log(receipt);
         Log.addLog(`Mint Transaction completed : blockNumber: [${receipt.blockNumber}], gasUsed:[${receipt.gasUsed}], status: [${receipt.status}], txHash:[${receipt.transactionHash}]`);
@@ -180,13 +272,13 @@ const contractLib = (function () {
 
   async function getOwnerOfToken(tokenId) {
     const web3 = new Web3(provider);
-    const contract = new web3.eth.Contract(tokenABI, Config.contractAddress);
+    const contract = new web3.eth.Contract(tokenABI_A, Config.contractAddress_A);
     return await contract.methods.ownerOf(tokenId).call();
   }
 
   async function getOwnerOfContract() {
     const web3 = new Web3(provider);
-    const contract = new web3.eth.Contract(tokenABI, Config.contractAddress);
+    const contract = new web3.eth.Contract(tokenABI_A, Config.contractAddress_A);
     return await contract.methods.owner().call();
   }
 
@@ -203,7 +295,7 @@ const contractLib = (function () {
       throw new Error('You are not owner of the contract');
     }
     const web3 = new Web3(provider);
-    const contract = new web3.eth.Contract(tokenABI, Config.contractAddress);
+    const contract = new web3.eth.Contract(tokenABI_A, Config.contractAddress_A);
     contract.methods.withdrawAll().send({
       from: selectedAccount
     }).on('transactionHash', (hash) => {
@@ -235,6 +327,32 @@ const contractLib = (function () {
     }
   }
 
+  function getETHBalance(address) {
+    const web3 = new Web3(provider);
+    return web3.eth.getBalance(address).then(balance => {
+      const ethString = web3.utils.fromWei(balance, 'ether');
+      return parseFloat(ethString).toFixed(4) + ' ETH';
+    });
+  }
+
+  async function checkBTokens(tokenIds){
+    if (!tokenIds || !Array.isArray(tokenIds)){
+      return;
+    }
+    const web3 = new Web3(provider);
+    const contract = new web3.eth.Contract(tokenABI_B, Config.contractAddress_B);
+    const result = [];
+    for (let i = 0; i < tokenIds.length; i++) {
+      try {
+        const owner = await contract.methods.ownerOf(tokenIds[i]).call();
+        result.push(owner);
+      }catch(ex){
+        console.log(ex);
+        result.push('Not Minted');
+      }
+    }
+    return result;
+  }
 
   return {
     connectToWallet,
@@ -247,6 +365,8 @@ const contractLib = (function () {
     getOwnerOfToken,
     getOwnerOfContract,
     withdrawAll,
+    getETHBalance,
+    checkBTokens,
   };
 })();
 
