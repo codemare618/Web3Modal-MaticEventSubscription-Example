@@ -11,7 +11,7 @@ const Config = {
     }
   },
 
-  contractAddress: '0xaD501c2d8Eb101137e07AAe6F73985ec20208535',
+  contractAddress: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
   tokenABI,
   apiEndPoint: 'http://us-central1-gems-802cb.cloudfunctions.net/',
 }

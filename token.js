@@ -68,12 +68,6 @@ var tokenABI = [
         "internalType": "uint256",
         "name": "tokenId",
         "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "string",
-        "name": "sessionId",
-        "type": "string"
       }
     ],
     "name": "Mint",
@@ -131,19 +125,6 @@ var tokenABI = [
         "internalType": "string",
         "name": "",
         "type": "string"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "MAX_UNITS",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -265,11 +246,6 @@ var tokenABI = [
         "type": "bool"
       },
       {
-        "internalType": "string",
-        "name": "sessionId",
-        "type": "string"
-      },
-      {
         "internalType": "uint256",
         "name": "expirationTime",
         "type": "uint256"
@@ -343,11 +319,6 @@ var tokenABI = [
         "type": "bool"
       },
       {
-        "internalType": "string",
-        "name": "_sessionId",
-        "type": "string"
-      },
-      {
         "internalType": "uint256",
         "name": "_expirationTime",
         "type": "uint256"
@@ -413,45 +384,6 @@ var tokenABI = [
     "name": "renounceOwnership",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_tokenId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_value",
-        "type": "uint256"
-      },
-      {
-        "internalType": "bytes",
-        "name": "_data",
-        "type": "bytes"
-      }
-    ],
-    "name": "royaltyInfo",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "_receiver",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_royaltyAmount",
-        "type": "uint256"
-      },
-      {
-        "internalType": "bytes",
-        "name": "_royaltyPaymentData",
-        "type": "bytes"
-      }
-    ],
-    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -697,11 +629,6 @@ var tokenABI = [
         "internalType": "bool",
         "name": "_canMint",
         "type": "bool"
-      },
-      {
-        "internalType": "string",
-        "name": "_sessionId",
-        "type": "string"
       },
       {
         "internalType": "uint256",

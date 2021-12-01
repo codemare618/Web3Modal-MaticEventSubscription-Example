@@ -125,9 +125,9 @@ const contractLib = (function () {
     const web3 = new Web3(provider);
     const contract = new web3.eth.Contract(tokenABI, Config.contractAddress);
 
-    const {maxMint, maxSupply, canMint, price, sessionId, expirationTime, signature} = await API.getMintParams(selectedAccount);
+    const {maxMint, maxSupply, canMint, price, expirationTime, signature} = await API.getMintParams(selectedAccount);
 
-    Log.addLog(`Parameters response: price=${price}ETH, maxSupply=${maxSupply}, maxMint=${maxMint}, price=${price}, sessionId=${sessionId}, expirationTime=${expirationTime} signature=${signature}`);
+    Log.addLog(`Parameters response: price=${price}ETH, maxSupply=${maxSupply}, maxMint=${maxMint}, price=${price}, expirationTime=${expirationTime} signature=${signature}`);
 
     if (!canMint) {
       throw new Error(`Can mint api returned false`);
@@ -145,7 +145,7 @@ const contractLib = (function () {
     Log.addLog(`Should send ${ethAmount} ETH to contract`);
 
     const gasPrice = await web3.eth.getGasPrice();
-    const mintMethod = contract.methods.mintTokens(selectedAccount, count, maxSupply, maxMint, priceInWei, canMint, sessionId, expirationTime, signature);
+    const mintMethod = contract.methods.mintTokens(selectedAccount, count, maxSupply, maxMint, priceInWei, canMint, expirationTime, signature);
     const gasEstimate = await mintMethod.estimateGas({
       from: selectedAccount,
       gasPrice,
